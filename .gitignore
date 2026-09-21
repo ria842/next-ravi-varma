@@ -1,0 +1,64 @@
+# --- Internal planning & course documents (intentionally untracked) ---
+plans/
+The_Next_Ravi_Varma_AI_Project_Proposal.md
+
+# --- Data & model artifacts (too large / regenerable) ---
+data/
+datasets/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+checkpoints/
+outputs/
+samples/
+logs/
+runs/
+wandb/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Environments ---
+.env
+.venv
+env/
+venv/
+ENV/
+.python-version
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+
+# --- Secrets ---
+*.key
+secrets.json
+.env.local
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
