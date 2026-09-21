@@ -85,18 +85,37 @@ resulting number carries no signal.
 > or Google Colab. Local machines are used for data preparation, caption review and code.
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/ria842/next-ravi-varma.git
 cd next-ravi-varma
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+### Build the dataset (Milestone 1)
+
+```bash
+python scripts/scrape_commons.py --dry-run   # metadata + classification, no downloads
+python scripts/scrape_commons.py             # full pipeline, ~10 min
+```
+
+Discovers files via deep-category search, separates oils from Ravi Varma Press prints,
+drops crops and low-resolution scans, downloads width-capped renderings, removes
+near-duplicates by perceptual hash, and writes a stratified train/holdout split.
+Re-running is safe — completed downloads are skipped.
+
+Outputs `data/curated/oil/`, `data/manifest.jsonl` and `data/DATA_CARD.md`. None of it
+is committed; rebuild it from the script.
+
+Useful flags: `--min-edge` (short-edge floor, default 460 — raise to 700 only if you
+move to 768px training) and `--max-width` (download cap, default 2048).
 
 ## Repository layout
 
 ```
 .
 |- README.md
-|- scripts/        # corpus scraper, dedup, caption pipeline
+|- scripts/
+|   |- scrape_commons.py   # corpus discovery, curation, dedup, split
 |- src/            # prompt expansion, generation, ControlNet pipeline
 |- notebooks/      # Colab/Kaggle training notebooks
 |- eval/           # metric harness and rating study
