@@ -19,3 +19,14 @@ matplotlib>=3.7           # loss curves -- as much a deliverable as the weights
 # attention by default, which matches xformers on a T4, and the xformers wheel
 # must match the exact torch build or it segfaults. train_lora.py falls back
 # automatically when the import fails.
+
+# torchao must be REMOVED, not pinned:
+#
+#     pip uninstall -y torchao
+#
+# peft's LoRA dispatcher probes every quantisation backend it knows about, and
+# its is_torchao_available() raises ImportError on an old version rather than
+# returning False. Colab preinstalls torchao 0.10.0; peft wants >0.16.0, so
+# unet.add_adapter() dies on a backend nothing here uses. With the package
+# absent, find_spec returns None and peft skips it cleanly -- whereas upgrading
+# it risks dragging in a different torch build.
