@@ -3,13 +3,16 @@ requests>=2.25
 Pillow>=9.0
 numpy>=1.24
 
+# Milestone 1 -- caption review and lint (CPU).
+transformers>=4.38          # exact CLIP token counts; without it caption_corpus.py estimates
+
 # Milestones 2-4 -- training, generation and the web panel.
 # These need a GPU; install them in Colab/Kaggle, not on the local machine.
 # Uncomment there, or use notebooks/requirements-gpu.txt once it exists.
 #
 # torch>=2.1
 # diffusers>=0.27
-# transformers>=4.38
+transformers>=4.38          # exact CLIP token counts; without it caption_corpus.py estimates
 # accelerate>=0.27
 # peft>=0.10
 # safetensors>=0.4

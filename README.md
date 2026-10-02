@@ -46,7 +46,7 @@ bf16 support, and a less mature ControlNet family. It remains listed as future w
 
 | # | Milestone | Deliverable | Status |
 |---|---|---|---|
-| 1 | Corpus curation & multimodal captioning | Paired image/caption dataset + data card | Not started |
+| 1 | Corpus curation & multimodal captioning | Paired image/caption dataset + data card | **Done** |
 | 2 | Style-injected LoRA fine-tuning | LoRA weights + loss curves | Not started |
 | 3 | Prompt parsing & semantic scene generation | Prompt expansion module + generation script | Not started |
 | 4 | ControlNet guardrailing & evaluation | Gradio dashboard + evaluation report | Not started |
@@ -109,6 +109,50 @@ is committed; rebuild it from the script.
 Useful flags: `--min-edge` (short-edge floor, default 460 — raise to 700 only if you
 move to 768px training) and `--max-width` (download cap, default 2048).
 
+### Caption the corpus (Milestone 1)
+
+```bash
+python scripts/caption_corpus.py draft --limit 10   # GPU: smoke test on 10 images
+python scripts/caption_corpus.py draft              # GPU: all 120
+python scripts/caption_corpus.py import             # or adopt captions made elsewhere
+python scripts/caption_corpus.py review --shard 1/3 # local: one teammate's share
+python scripts/caption_corpus.py lint
+python scripts/caption_corpus.py export
+```
+
+`import` adopts a `file_name`/`text` jsonl produced by another tool, applies the
+hand corrections in `data/caption_overrides.jsonl` on top, and injects the
+ground-truth entity clause (`Shakuntala`, `a scene from the Mahabharata`) that
+no VLM can supply — falling back to the bare names when the full clause would
+breach the token budget, and skipping rather than truncating. Everything it
+adopts is marked unreviewed, because §1.3 discipline is the human pass.
+
+`draft` needs a GPU — run it in Colab or Kaggle. BLIP-2 answers a fixed
+three-question template per image (figures and clothing, pose and gaze,
+background), and the answers are assembled into one caption behind the trigger
+token `rvrma`. Named figures come from the file title and Commons categories,
+not from the VLM: BLIP-2 will never guess "Shakuntala".
+
+Install `transformers` locally for exact CLIP token counts; without it the
+budget check falls back to a calibrated estimate that errs about 7 tokens high,
+which can cost you an entity clause that would in fact have fit.
+
+`import`, `review`, `lint` and `export` run locally with no GPU. `review` is resumable and
+shardable, so three people can split the correction pass without collisions.
+
+**Captions describe content, never style.** A caption containing "oil painting"
+or "soft lighting" binds Varma's style to those common English tokens instead of
+to the trigger, and the trigger then does nothing at inference. This is enforced,
+not just documented: `review` refuses to save a caption that trips the style
+lint, and `export` refuses to emit a corpus that is incomplete, unreviewed or
+failing lint.
+
+Captions live in `data/captions.jsonl`, deliberately separate from
+`manifest.jsonl` — the scraper rewrites the manifest on every run and would
+otherwise discard the human correction pass. `export` writes `data/train/` and
+`data/holdout/`, each with the `metadata.jsonl` that `diffusers`' `imagefolder`
+loader expects.
+
 ## Repository layout
 
 ```
@@ -116,6 +160,7 @@ move to 768px training) and `--max-width` (download cap, default 2048).
 |- README.md
 |- scripts/
 |   |- scrape_commons.py   # corpus discovery, curation, dedup, split
+|   |- caption_corpus.py   # BLIP-2 drafting, human review, lint, export
 |- src/            # prompt expansion, generation, ControlNet pipeline
 |- notebooks/      # Colab/Kaggle training notebooks
 |- eval/           # metric harness and rating study

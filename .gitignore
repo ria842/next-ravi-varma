@@ -3,8 +3,19 @@ plans/
 The_Next_Ravi_Varma_AI_Project_Proposal.md
 
 # --- Data & model artifacts (too large / regenerable) ---
-data/
+# data/* rather than data/ so the negations below can take effect: git does not
+# descend into an excluded directory, so !data/x is ignored under a bare data/.
+data/*
+# Caption work is hand-written and NOT regenerable by any script -- unlike the
+# images, which scrape_commons.py rebuilds. Keep it tracked.
+!data/captions.jsonl
+!data/caption_overrides.jsonl
+# The two cards are Milestone 1 deliverables and belong in the history.
+!data/DATA_CARD.md
+!data/CAPTION_CARD.md
 datasets/
+data.zip
+*.zip
 *.safetensors
 *.ckpt
 *.pt
