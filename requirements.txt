@@ -8,11 +8,10 @@ transformers>=4.38          # exact CLIP token counts; without it caption_corpus
 
 # Milestones 2-4 -- training, generation and the web panel.
 # These need a GPU; install them in Colab/Kaggle, not on the local machine.
-# Uncomment there, or use notebooks/requirements-gpu.txt once it exists.
+# Use notebooks/requirements-gpu.txt there -- it is the maintained list.
 #
 # torch>=2.1
 # diffusers>=0.27
-transformers>=4.38          # exact CLIP token counts; without it caption_corpus.py estimates
 # accelerate>=0.27
 # peft>=0.10
 # safetensors>=0.4

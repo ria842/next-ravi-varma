@@ -47,7 +47,7 @@ bf16 support, and a less mature ControlNet family. It remains listed as future w
 | # | Milestone | Deliverable | Status |
 |---|---|---|---|
 | 1 | Corpus curation & multimodal captioning | Paired image/caption dataset + data card | **Done** |
-| 2 | Style-injected LoRA fine-tuning | LoRA weights + loss curves | Not started |
+| 2 | Style-injected LoRA fine-tuning | LoRA weights + loss curves | In progress |
 | 3 | Prompt parsing & semantic scene generation | Prompt expansion module + generation script | Not started |
 | 4 | ControlNet guardrailing & evaluation | Gradio dashboard + evaluation report | Not started |
 
@@ -153,6 +153,50 @@ otherwise discard the human correction pass. `export` writes `data/train/` and
 `data/holdout/`, each with the `metadata.jsonl` that `diffusers`' `imagefolder`
 loader expects.
 
+### Train the LoRA (Milestone 2)
+
+Needs a GPU. Open `notebooks/milestone2_lora_colab.ipynb` in Colab on a T4 —
+it clones this repo, mounts Drive and calls the trainer. The training logic
+lives in the script, not the notebook, so a run is reviewable and reproducible.
+
+```bash
+python scripts/train_lora.py --output-dir runs/r32          # the reference run
+python scripts/train_lora.py --rank 16 --output-dir runs/r16        # ablation
+python scripts/train_lora.py --no-bucket --output-dir runs/square   # ablation
+python scripts/train_lora.py --output-dir runs/r32 --resume latest  # after a kill
+```
+
+Defaults are the hyperparameters in the plan: rank 32, alpha 32, lr 1e-4
+constant-with-warmup, effective batch 4 by gradient accumulation, fp16, 8-bit
+Adam, gradient checkpointing, **text encoder frozen**, 2500 steps.
+
+**Latents and text embeddings are cached once**, after which the VAE and text
+encoder move to CPU. Only the UNet and the adapters stay on the GPU, which is
+what makes rank 32 fit in a free T4's 16 GB with headroom.
+
+**Resolution is 512, not 768.** 49 of the 100 images have a short edge below 512
+and the median is 528 — training at 768 would upscale most of the corpus and
+teach the LoRA interpolation artefacts as though they were brushwork.
+
+**Aspect-ratio bucketing is on by default.** 93 of 100 paintings are portrait,
+median ratio 0.70, so a square centre crop keeps a median 70% of each painting
+(worst case 54%); bucketing keeps 92% and upscales nothing. It also keeps the
+captions honest — they carry a *composition* field, and a crop would describe a
+framing the model never sees. `--no-bucket` restores square cropping for the
+baseline comparison.
+
+**Checkpoints every 500 steps**, each carrying the optimiser moments as well as
+the adapter weights, so a resume continues the schedule instead of restarting
+it. Point `--output-dir` at Drive: Colab kills sessions, and `loss.csv` is
+flushed every logging step for the same reason. The loss curves are as much the
+Milestone 2 deliverable as the weights.
+
+Notebook sections 6 and 7 answer the top entry in the plan's risk register —
+whether the `rvrma` trigger does anything — by generating the same seed and
+scene three ways (no LoRA / LoRA without the trigger / LoRA with it) and then
+sweeping the adapter scale. Run that on the **first** checkpoint, not at the end
+of the week.
+
 ## Repository layout
 
 ```
@@ -161,8 +205,11 @@ loader expects.
 |- scripts/
 |   |- scrape_commons.py   # corpus discovery, curation, dedup, split
 |   |- caption_corpus.py   # BLIP-2 drafting, human review, lint, export
+|   |- train_lora.py       # LoRA training: latent cache, AR buckets, checkpoints
 |- src/            # prompt expansion, generation, ControlNet pipeline
-|- notebooks/      # Colab/Kaggle training notebooks
+|- notebooks/
+|   |- milestone2_lora_colab.ipynb   # T4 driver: Drive, dataset, run, curves
+|   |- requirements-gpu.txt          # GPU deps; torch deliberately unpinned
 |- eval/           # metric harness and rating study
 |- app/            # Gradio dashboard
 ```

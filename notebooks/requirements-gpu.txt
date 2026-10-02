@@ -1,0 +1,21 @@
+# Milestones 2-4 -- GPU dependencies. Install these in Colab or Kaggle.
+#
+# torch is deliberately absent: Colab and Kaggle ship a build matched to their
+# CUDA driver, and reinstalling it is the most common way to break a session.
+#
+#     pip install -q -r notebooks/requirements-gpu.txt
+
+diffusers>=0.27
+transformers>=4.38
+accelerate>=0.27
+peft>=0.10
+safetensors>=0.4
+bitsandbytes>=0.43        # 8-bit Adam; --no-8bit-adam falls back to fp32 AdamW
+Pillow>=9.0
+numpy>=1.24
+matplotlib>=3.7           # loss curves -- as much a deliverable as the weights
+
+# xformers is NOT pinned. diffusers uses torch's own scaled-dot-product
+# attention by default, which matches xformers on a T4, and the xformers wheel
+# must match the exact torch build or it segfaults. train_lora.py falls back
+# automatically when the import fails.
