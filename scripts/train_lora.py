@@ -25,6 +25,18 @@ crop quietly falsifies. So images are assigned to aspect-ratio buckets near the
 target area instead, and the whole painting is trained on. --no-bucket restores
 the square-crop behaviour for a baseline run.
 
+Run length
+----------
+Each optimiser step consumes --gradient-accumulation-steps images, so steps are
+not epochs. At the default accum 4 over 100 images an epoch is 25 steps.
+
+Run 1 used 2500 steps -- the figure in plans/PLAN.md, which assumed batch 1 and
+no accumulation -- and so trained 100 epochs instead of the intended ~20. The
+adapters collapsed: validation samples were clean at step 500 and generated
+near-empty smears by 2500, with training loss bottoming around step 1200 and
+rising afterwards. The default is now 750 steps (30 epochs), and the script
+prints epochs and warns past 40.
+
 Resolution
 ----------
 Train at 512, not 768. 49 of the 100 images have a short edge under 512 and the
@@ -275,13 +287,17 @@ def save_checkpoint(out_dir: Path, step: int, unet, optimizer, lr_scheduler,
         "args": vars(args),
     }, ckpt / "training_state.pt")
 
+    # Prune only training_state.pt. The adapter weights stay forever: the whole
+    # point of checkpointing a run that may overtrain is being able to go back to
+    # the step that was good, and an early checkpoint is exactly the one a
+    # keep-the-last-N policy deletes.
     existing = sorted(out_dir.glob("checkpoint-*"))
     if keep > 0 and len(existing) > keep:
         for old in existing[:-keep]:
-            # the final weights are small; it is the optimiser state that fills
-            # Drive, so prune whole directories rather than keeping stubs
-            shutil.rmtree(old, ignore_errors=True)
-            print(f"  pruned {old.name}")
+            state = old / "training_state.pt"
+            if state.exists():
+                state.unlink()
+                print(f"  pruned optimiser state from {old.name} (weights kept)")
     return ckpt
 
 
@@ -289,14 +305,21 @@ def find_resume(out_dir: Path, resume: str) -> Path | None:
     if resume in ("", None):
         return None
     if resume == "latest":
-        found = sorted(out_dir.glob("checkpoint-*"))
+        found = [d for d in sorted(out_dir.glob("checkpoint-*"))
+                 if (d / "training_state.pt").exists()]
         if not found:
-            print(f"  --resume latest: no checkpoint in {out_dir}, starting fresh")
+            print(f"  --resume latest: no resumable checkpoint in {out_dir}, "
+                  f"starting fresh (pruned checkpoints keep weights but not "
+                  f"optimiser state)")
             return None
         return found[-1]
     path = Path(resume)
     if not path.exists():
         sys.exit(f"--resume {resume}: not found")
+    if not (path / "training_state.pt").exists():
+        sys.exit(f"--resume {resume}: holds adapter weights but no "
+                 f"training_state.pt, so the optimiser state is gone and the run "
+                 f"cannot be continued from here")
     return path
 
 
@@ -511,9 +534,19 @@ def train(args) -> int:
         encoding="utf-8")
 
     # ---- loop ------------------------------------------------------------
-    print(f"\ntraining to step {args.max_train_steps} "
-          f"(~{args.max_train_steps/steps_per_epoch:.1f} epochs over {len(samples)} images, "
-          f"effective batch {args.gradient_accumulation_steps})")
+    epochs = args.max_train_steps / steps_per_epoch
+    presentations = args.max_train_steps * args.gradient_accumulation_steps
+    print(f"\ntraining to step {args.max_train_steps}: {presentations} image "
+          f"presentations over {len(samples)} images = {epochs:.0f} EPOCHS "
+          f"(effective batch {args.gradient_accumulation_steps})")
+    if epochs > 40:
+        # run 1 did 100 epochs at a constant 1e-4 and the adapters collapsed:
+        # samples were clean at step 500 (20 epochs), gone by 2500
+        print(f"  ! {epochs:.0f} epochs is a lot for {len(samples)} images. The first "
+              f"run collapsed at 100.\n"
+              f"  ! Consider --max-train-steps "
+              f"{int(30 * steps_per_epoch)} (30 epochs), or a decaying "
+              f"--lr-scheduler cosine if you want the length.")
 
     unet.train()
     step = start_step
@@ -634,7 +667,11 @@ def main() -> int:
     g.add_argument("--learning-rate", type=float, default=1e-4)
     g.add_argument("--lr-scheduler", default="constant_with_warmup")
     g.add_argument("--lr-warmup-steps", type=int, default=100)
-    g.add_argument("--max-train-steps", type=int, default=2500)
+    g.add_argument("--max-train-steps", type=int, default=750,
+                   help="750 steps x accum 4 = 3000 presentations = 30 epochs over "
+                        "100 images. The plan's 2500 assumed batch 1 and no "
+                        "accumulation; at accum 4 it is 100 epochs, which collapsed "
+                        "the first run -- see the module docstring")
     g.add_argument("--gradient-accumulation-steps", type=int, default=4)
     g.add_argument("--max-grad-norm", type=float, default=1.0)
     g.add_argument("--mixed-precision", choices=["fp16", "bf16", "no"], default="fp16",
@@ -649,14 +686,16 @@ def main() -> int:
     g.add_argument("--seed", type=int, default=42)
 
     g = ap.add_argument_group("checkpointing and logging")
-    g.add_argument("--checkpointing-steps", type=int, default=500,
-                   help="Colab kills sessions; an uncheckpointed run is a lost day")
+    g.add_argument("--checkpointing-steps", type=int, default=125,
+                   help="Colab kills sessions; an uncheckpointed run is a lost day. "
+                        "Also the granularity you get to choose between afterwards, "
+                        "so keep it fine -- adapter weights are never pruned")
     g.add_argument("--checkpoints-total-limit", type=int, default=3,
                    help="0 keeps every checkpoint (optimiser state is ~100MB each)")
     g.add_argument("--logging-steps", type=int, default=25)
     g.add_argument("--resume", default="",
                    help="'latest' or a path to a checkpoint directory")
-    g.add_argument("--validation-steps", type=int, default=500,
+    g.add_argument("--validation-steps", type=int, default=125,
                    help="0 disables sampling during training")
     g.add_argument("--validation-prompt",
                    default=f"{TRIGGER}, Shakuntala writing a letter, seated under a tree",

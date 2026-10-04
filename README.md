@@ -168,7 +168,15 @@ python scripts/train_lora.py --output-dir runs/r32 --resume latest  # after a ki
 
 Defaults are the hyperparameters in the plan: rank 32, alpha 32, lr 1e-4
 constant-with-warmup, effective batch 4 by gradient accumulation, fp16, 8-bit
-Adam, gradient checkpointing, **text encoder frozen**, 2500 steps.
+Adam, gradient checkpointing, **text encoder frozen**, 750 steps.
+
+**Steps are not epochs.** Each step consumes `--gradient-accumulation-steps`
+images, so at the default accum 4 over 100 images an epoch is 25 steps. The
+plan's 2500 assumed batch 1 with no accumulation; run at accum 4 it is 100
+epochs, and run 1 collapsed under it — validation samples were clean at step 500
+and near-empty smears by 2500, with training loss bottoming near step 1200 and
+climbing after. The default is now 750 steps (30 epochs); the script prints the
+epoch count and warns past 40.
 
 **Latents and text embeddings are cached once**, after which the VAE and text
 encoder move to CPU. Only the UNet and the adapters stay on the GPU, which is
@@ -185,9 +193,12 @@ captions honest — they carry a *composition* field, and a crop would describe 
 framing the model never sees. `--no-bucket` restores square cropping for the
 baseline comparison.
 
-**Checkpoints every 500 steps**, each carrying the optimiser moments as well as
+**Checkpoints every 125 steps**, each carrying the optimiser moments as well as
 the adapter weights, so a resume continues the schedule instead of restarting
-it. Point `--output-dir` at Drive: Colab kills sessions, and `loss.csv` is
+it. `--checkpoints-total-limit` prunes only `training_state.pt`; **adapter
+weights are never deleted**. Run 1 lost its best model to a keep-the-last-3
+policy, which is precisely the wrong thing to prune on a run that may
+overtrain. Point `--output-dir` at Drive: Colab kills sessions, and `loss.csv` is
 flushed every logging step for the same reason. The loss curves are as much the
 Milestone 2 deliverable as the weights.
 
