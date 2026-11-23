@@ -54,7 +54,7 @@ class Painter:
         self.cn_pipe = cn_pipe
         self.txt_pipe = StableDiffusionPipeline(**parts, requires_safety_checker=False)
         self.img_pipe = StableDiffusionImg2ImgPipeline(**parts, requires_safety_checker=False)
-        cn_pipe.enable_vae_slicing()
+        cn_pipe.vae.enable_slicing()
         for p in (cn_pipe, self.txt_pipe, self.img_pipe):
             p.set_progress_bar_config(disable=True)
         self._pose = self._canny = None
