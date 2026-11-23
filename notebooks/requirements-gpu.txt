@@ -15,6 +15,11 @@ Pillow>=9.0
 numpy>=1.24
 matplotlib>=3.7           # loss curves -- as much a deliverable as the weights
 
+# Milestones 3-4: web panel and ControlNet preprocessors.
+gradio>=4.0
+controlnet-aux>=0.0.7     # OpenPose + Canny detectors
+opencv-python-headless    # controlnet-aux imports cv2
+
 # xformers is NOT pinned. diffusers uses torch's own scaled-dot-product
 # attention by default, which matches xformers on a T4, and the xformers wheel
 # must match the exact torch build or it segfaults. train_lora.py falls back

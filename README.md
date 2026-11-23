@@ -48,8 +48,8 @@ bf16 support, and a less mature ControlNet family. It remains listed as future w
 |---|---|---|---|
 | 1 | Corpus curation & multimodal captioning | Paired image/caption dataset + data card | **Done** |
 | 2 | Style-injected LoRA fine-tuning | LoRA weights + loss curves | In progress |
-| 3 | Prompt parsing & semantic scene generation | Prompt expansion module + generation script | Not started |
-| 4 | ControlNet guardrailing & evaluation | Gradio dashboard + evaluation report | Not started |
+| 3 | Prompt parsing & semantic scene generation | Prompt expansion module + generation script | Implemented, awaiting first GPU run |
+| 4 | ControlNet guardrailing & evaluation | Gradio dashboard + evaluation report | Panel implemented, awaiting first GPU run; evaluation not started |
 
 ## Dataset
 
@@ -208,6 +208,32 @@ scene three ways (no LoRA / LoRA without the trigger / LoRA with it) and then
 sweeping the adapter scale. Run that on the **first** checkpoint, not at the end
 of the week.
 
+### Generate and the web panel (Milestones 3-4)
+
+Needs a GPU and the LoRA from Milestone 2. `notebooks/milestone34_app_colab.ipynb` does all of it on a T4.
+
+```bash
+python src/expand.py                                    # network-free self-check of the expander
+python src/generate.py "Yudhishthira weeping over the fallen Karna on Kurukshetra" --lora runs/r32/checkpoint-750
+python src/generate.py "Draupadi in the court" --lora runs/r32/checkpoint-750 --control pose.png --mode openpose
+python app/app.py --lora runs/r32/checkpoint-750 --share    # Gradio panel, public link
+```
+
+**Prompt expansion** (`src/expand.py`). The LoRA was trained on content-only captions behind `rvrma`,
+so the expanded prompt is written in the same register: comma-separated content clauses, trigger first,
+<= 75 CLIP tokens. Style words in the user's text ("oil canvas", "dramatic") are *stripped*, using the
+same ban list as the caption lint, because the trigger carries the style and those words would pull
+toward the base model's generic version of it. An LLM (set `GROQ_API_KEY` or `GEMINI_API_KEY`; both
+free) writes the expansion, seeded with period cues for known epic figures; if it is missing, rate-limited
+or fails, a deterministic gazetteer template produces the prompt instead. Over-long prompts lose whole
+trailing clauses, never a mid-phrase CLIP truncation, and `generate.py` refuses any prompt over 77 tokens.
+
+**ControlNet** (`src/generate.py`). The reference can be a photo (`openpose`), any image's edges (`canny`),
+or a stick-figure drawing / ready-made pose map used as is (`skeleton` - the OpenPose detector often finds
+nothing in a crude sketch). With no reference the pipeline is plain text-to-image on the same LoRA.
+Output is generated at 512x768 (the corpus is 93% portrait) and upscaled 1.5x by a low-strength img2img pass,
+which keeps the pose and adds detail instead of stretching pixels.
+
 ## Repository layout
 
 ```
@@ -217,12 +243,15 @@ of the week.
 |   |- scrape_commons.py   # corpus discovery, curation, dedup, split
 |   |- caption_corpus.py   # BLIP-2 drafting, human review, lint, export
 |   |- train_lora.py       # LoRA training: latent cache, AR buckets, checkpoints
-|- src/            # prompt expansion, generation, ControlNet pipeline
+|- src/
+|   |- expand.py           # prompt expansion: LLM + template fallback + token guard
+|   |- generate.py         # SD1.5 + LoRA + ControlNet + hi-res pass, CLI
 |- notebooks/
 |   |- milestone2_lora_colab.ipynb   # T4 driver: Drive, dataset, run, curves
+|   |- milestone34_app_colab.ipynb   # T4 driver: smoke test + launch the panel
 |   |- requirements-gpu.txt          # GPU deps; torch deliberately unpinned
 |- eval/           # metric harness and rating study
-|- app/            # Gradio dashboard
+|- app/app.py      # Gradio dashboard
 ```
 
 Data, model weights and internal planning documents are untracked; see `.gitignore`.
