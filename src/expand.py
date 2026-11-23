@@ -28,6 +28,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import caption_corpus as cc  # noqa: E402
 
+import logging  # noqa: E402
+logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
+
 TRIGGER = cc.TRIGGER
 BUDGET = cc.CLIP_CONTENT_BUDGET  # 75: CLIP's 77 minus BOS/EOS
 

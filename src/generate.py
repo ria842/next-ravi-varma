@@ -35,6 +35,13 @@ class Painter:
                                StableDiffusionControlNetPipeline,
                                StableDiffusionImg2ImgPipeline, StableDiffusionPipeline)
         self.device = device
+        if lora:
+            lp = Path(lora)
+            if not lp.exists():
+                near = sorted(str(x) for x in lp.parent.glob("*"))[:10] if lp.parent.exists() else []
+                raise FileNotFoundError(f"LoRA path not found: {lora}\nnearby: {near or 'parent folder missing too'}")
+            if lp.is_dir() and not list(lp.glob("*.safetensors")):
+                raise FileNotFoundError(f"no .safetensors inside {lora}; point at a checkpoint-N folder")        
         dt = torch.float16
         self._cn = {m: ControlNetModel.from_pretrained(r, torch_dtype=dt) for m, r in CONTROLNETS.items()}
         cn_pipe = StableDiffusionControlNetPipeline.from_pretrained(
