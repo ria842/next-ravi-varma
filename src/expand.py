@@ -35,8 +35,12 @@ TRIGGER = cc.TRIGGER
 BUDGET = cc.CLIP_CONTENT_BUDGET  # 75: CLIP's 77 minus BOS/EOS
 
 # Things we do NOT want, whatever the user typed. Short: it has its own 77-token cap.
-NEGATIVE = ("photograph, lithograph, print, cartoon, anime, 3d render, text, watermark, "
-            "modern clothing, deformed, bad anatomy, extra limbs, extra fingers, blurry")
+# The Milestone 2 best-run negative (epiCRealism ckpt 500), tuned by hand -- small changes
+# here backfired (gold frames, grayscale) -- plus "modern clothing" for the known
+# period-dress drift.
+NEGATIVE = ("picture frame, ornate border, frame, monochrome, deformed, bad anatomy, bad hands, "
+            "extra fingers, mutated hands, extra limbs, extra legs, distorted face, blurry face, "
+            "cross-eyed, modern clothing")
 
 # --------------------------------------------------------------------------- knowledge
 # Period visual cues, in the register of the training captions. Keyed by lowercase

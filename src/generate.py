@@ -1,11 +1,14 @@
 """Milestones 3 + 4 -- text (and optional pose/edge reference) in, painting out.
 
-    python src/generate.py "Yudhishthira weeping over the fallen Karna" --lora runs/r32/checkpoint-750
-    python src/generate.py "Draupadi at the court" --lora runs/r32 --control pose.png --mode openpose
+    python src/generate.py "Yudhishthira weeping over the fallen Karna" --lora runs/r32-750-epicrealism/checkpoint-000500
+    python src/generate.py "Draupadi at the court" --lora runs/r32-750-epicrealism/checkpoint-000500 --control pose.png --mode openpose
 
 Needs a GPU. One pipeline is built once and reused: the LoRA is loaded onto the shared
 UNet, and the ControlNet is swapped per call, so the T4 holds SD1.5 + one LoRA + two
 ControlNets (~0.7 GB each) comfortably.
+
+Defaults are the Milestone 2 best recipe: epiCRealism base, LoRA scale 0.8, 512x704
+portrait, guidance 7, hires 1.5x at img2img strength 0.45.
 """
 
 from __future__ import annotations
@@ -18,7 +21,10 @@ from PIL import Image, ImageOps
 
 from expand import expand
 
-BASE = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+# The base the LoRA was TRAINED on -- a LoRA is a delta from that UNet. The Milestone 2
+# best run (r32-750-epicrealism, checkpoint-000500) used epiCRealism, an SD 1.5 fine-tune,
+# so the SD 1.5 ControlNets below still fit it.
+BASE = "emilianJR/epiCRealism"
 CONTROLNETS = {
     "openpose": "lllyasviel/control_v11p_sd15_openpose",
     "canny": "lllyasviel/control_v11p_sd15_canny",
@@ -81,8 +87,8 @@ class Painter:
                 raise ValueError(f"prompt is {n} tokens; CLIP keeps 77 and would drop the tail: {t!r}")
 
     def paint(self, prompt: str, negative: str, ref: Image.Image | None = None,
-              mode: str = "openpose", control_scale: float = 1.0, lora_scale: float = 1.0,
-              size: tuple[int, int] = (512, 768), steps: int = 30, cfg: float = 7.5,
+              mode: str = "openpose", control_scale: float = 1.0, lora_scale: float = 0.8,
+              size: tuple[int, int] = (512, 704), steps: int = 30, cfg: float = 7.0,
               seed: int = 42, hires: float = 1.5):
         """Returns (final image, control image or None). hires>1 adds an img2img pass."""
         self.check_tokens(prompt, negative)
@@ -104,7 +110,7 @@ class Painter:
             for k in ("width", "height"):
                 kw.pop(k)
             kw["generator"] = torch.Generator(self.device).manual_seed(seed)
-            img = self.img_pipe(image=big, strength=0.4, **kw).images[0]
+            img = self.img_pipe(image=big, strength=0.45, **kw).images[0]
         return img, ctrl
 
 
@@ -115,7 +121,8 @@ def main():
     ap.add_argument("--control", help="pose photo / stick figure / edge reference")
     ap.add_argument("--mode", choices=MODES, default="openpose")
     ap.add_argument("--no-llm", action="store_true", help="template expansion only")
-    ap.add_argument("--lora-scale", type=float, default=1.0)
+    ap.add_argument("--base", default=BASE, help="must be the base the LoRA was trained on")
+    ap.add_argument("--lora-scale", type=float, default=0.8)
     ap.add_argument("--control-scale", type=float, default=1.0)
     ap.add_argument("--hires", type=float, default=1.5, help="upscale factor; 1 disables")
     ap.add_argument("--seed", type=int, default=42)
@@ -124,7 +131,7 @@ def main():
 
     e = expand(a.scene, use_llm=not a.no_llm)
     print(f"[{e.source}] {e.tokens} tokens\n{e.prompt}\n" + (f"note: {e.note}\n" if e.note else ""))
-    img, _ = Painter(a.lora).paint(
+    img, _ = Painter(a.lora, a.base).paint(
         e.prompt, e.negative, Image.open(a.control) if a.control else None, a.mode,
         a.control_scale, a.lora_scale, seed=a.seed, hires=a.hires)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
