@@ -30,18 +30,20 @@ EXAMPLE = ("Yudhishthira weeping over the fallen body of Karna on the battlefiel
 
 def do_expand(scene, use_llm):
     e = expand(scene, use_llm)
-    info = f"{e.source} - {e.tokens}/75 tokens"
+    info = f"{e.tokens}/75 tokens"
     if e.stripped:
         info += f" - removed style words (the trigger carries the style): {', '.join(e.stripped)}"
-    return e.prompt, info + (f"\n{e.note}" if e.note else "")
+    return e.prompt, info
 
 
 def do_paint(scene, final, use_llm, ref, mode, control_scale, lora_scale, hires, seed, steps):
     if not final.strip():
         final, _ = do_expand(scene, use_llm)
     try:
-        img, ctrl = painter.paint(final, NEGATIVE, ref, mode, control_scale,
-                                  lora_scale, steps=int(steps), seed=int(seed), hires=hires)
+        # Gradio sliders return int for whole values (1.0 -> 1); diffusers rejects non-float
+        img, ctrl = painter.paint(final, NEGATIVE, ref, mode, float(control_scale),
+                                  float(lora_scale), steps=int(steps), seed=int(seed),
+                                  hires=float(hires))
     except ValueError as e:  # token guard
         raise gr.Error(str(e))
     return img, ctrl, final
@@ -53,7 +55,7 @@ with gr.Blocks(title="The Next Ravi Varma") as demo:
     with gr.Row():
         with gr.Column():
             scene = gr.Textbox(label="Narrative prompt", value=EXAMPLE, lines=3)
-            use_llm = gr.Checkbox(True, label="Expand with LLM (falls back to template)")
+            use_llm = gr.Checkbox(True, label="Enrich prompt")
             expand_btn = gr.Button("1. Expand prompt")
             final = gr.Textbox(label="Final prompt (editable)", lines=4)
             info = gr.Markdown()

@@ -49,7 +49,10 @@ class Painter:
             if lp.is_dir() and not list(lp.glob("*.safetensors")):
                 raise FileNotFoundError(f"no .safetensors inside {lora}; point at a checkpoint-N folder")        
         dt = torch.float16
-        self._cn = {m: ControlNetModel.from_pretrained(r, torch_dtype=dt) for m, r in CONTROLNETS.items()}
+        # all of them to the GPU now: pipe.to(device) below only moves the one attached at
+        # build time, and swapping in a CPU-resident ControlNet later is a device mismatch
+        self._cn = {m: ControlNetModel.from_pretrained(r, torch_dtype=dt).to(device)
+                    for m, r in CONTROLNETS.items()}
         cn_pipe = StableDiffusionControlNetPipeline.from_pretrained(
             base, controlnet=self._cn["openpose"], torch_dtype=dt,
             safety_checker=None, requires_safety_checker=False).to(device)
