@@ -20,6 +20,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -168,11 +170,27 @@ style, lighting, dramatic, soft, rich, detailed, realistic, beautiful, masterpie
 write the trigger token. Output the line only."""
 
 
-def _post(url: str, body: dict, headers: dict) -> dict:
-    req = urllib.request.Request(url, json.dumps(body).encode(),
-                                 {"Content-Type": "application/json", **headers})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        return json.load(r)
+def _post(url: str, body: dict, headers: dict, retries: int = 2) -> dict:
+    """POST with retries: hosted models return 503/429 under load, and thinking models
+    can take well over 20 s. A 400 caused by thinkingConfig (a model without that
+    setting) retries once without it."""
+    for attempt in range(retries + 1):
+        req = urllib.request.Request(url, json.dumps(body).encode(),
+                                     {"Content-Type": "application/json", **headers})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            gc = body.get("generationConfig") or {}
+            if e.code == 400 and gc.pop("thinkingConfig", None) is not None:
+                continue
+            if e.code not in (429, 500, 503) or attempt == retries:
+                raise
+        except (TimeoutError, urllib.error.URLError):
+            if attempt == retries:
+                raise
+        time.sleep(5 * 2 ** attempt)
+    raise RuntimeError("unreachable")
 
 
 def llm_expand(scene: str, provider: str | None = None) -> str:
@@ -188,11 +206,14 @@ def llm_expand(scene: str, provider: str | None = None) -> str:
                                   {"role": "user", "content": user}]},
                     {"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"})
         return out["choices"][0]["message"]["content"]
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")  # 2.0-flash was retired
     out = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 {"systemInstruction": {"parts": [{"text": SYSTEM}]},
                  "contents": [{"parts": [{"text": user}]}],
-                 "generationConfig": {"temperature": 0.4, "maxOutputTokens": 120}},
+                 # thinking models spend output tokens before answering; 120 left only a fragment.
+                 # The 45-word limit in SYSTEM, not this cap, keeps the answer short.
+                 "generationConfig": {"temperature": 0.4, "maxOutputTokens": 2048,
+                                      "thinkingConfig": {"thinkingLevel": "low"}}},
                 {"x-goog-api-key": os.environ["GEMINI_API_KEY"]})
     return out["candidates"][0]["content"]["parts"][0]["text"]
 
